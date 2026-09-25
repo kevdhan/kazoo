@@ -8,7 +8,14 @@ cd "$(git rev-parse --show-toplevel)"
 ERLANG_MK_COMMIT=82179575d9191305805c8e6e8107be7c3f80a6be
 EMK_DIR=/opt/emk
 
-otp="$(erl -noshell -eval 'io:put_chars(erlang:system_info(otp_release)), halt().')"
+otp="$(erl -noshell -eval 'io:put_chars(erlang:system_info(otp_release)), halt().' 2>/dev/null || true)"
+# On a plain Ubuntu image without OTP 22, install it first; install-ubuntu.sh
+# sets KZ_OTP_BOOTSTRAP before calling back into this script.
+if [ "$otp" != "22" ] && [ -z "${KZ_OTP_BOOTSTRAP:-}" ] && [ -f .cursor/install-ubuntu.sh ] \
+    && grep -qiE '^ID(_LIKE)?=.*(ubuntu|debian)' /etc/os-release 2>/dev/null; then
+    export KZ_OTP_BOOTSTRAP=1
+    exec bash .cursor/install-ubuntu.sh "$@"
+fi
 if [ "$otp" != "22" ]; then
     echo "install.sh: expected OTP 22, found OTP ${otp}" >&2
     exit 1
