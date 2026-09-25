@@ -22,6 +22,10 @@
         ,delete/2
         ]).
 
+-ifdef(TEST).
+-export([validate_time_window/1]).
+-endif.
+
 -include("crossbar.hrl").
 
 -define(CB_LIST, <<"temporal_rules/crossbar_listing">>).
@@ -174,6 +178,26 @@ summary(Context) ->
 %%------------------------------------------------------------------------------
 -spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
-    cb_context:set_doc(Context, kz_doc:set_type(cb_context:doc(Context), <<"temporal_rule">>));
+    Doc = kz_doc:set_type(cb_context:doc(Context), <<"temporal_rule">>),
+    validate_time_window(cb_context:set_doc(Context, Doc));
 on_successful_validation(Id, Context) ->
     crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"temporal_rule">>)).
+
+%%------------------------------------------------------------------------------
+%% @doc A window whose start is later than its stop spans midnight; a window
+%% whose start equals its stop can never match a call.
+%% @end
+%%------------------------------------------------------------------------------
+-spec validate_time_window(cb_context:context()) -> cb_context:context().
+validate_time_window(Context) ->
+    Doc = cb_context:doc(Context),
+    Start = kzd_temporal_rules:time_window_start(Doc, 0),
+    Stop = kzd_temporal_rules:time_window_stop(Doc, 0),
+    case Start =:= Stop of
+        'false' -> Context;
+        'true' ->
+            Msg = kz_json:from_list([{<<"message">>, <<"time_window_stop must be different from time_window_start">>}
+                                    ,{<<"cause">>, Stop}
+                                    ]),
+            cb_context:add_validation_error(<<"time_window_stop">>, <<"invalid">>, Msg, Context)
+    end.
