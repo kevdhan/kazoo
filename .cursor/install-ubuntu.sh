@@ -106,6 +106,7 @@ fi
 # Force GCC for every C/C++ dep. The image's default `cc`/`c++` are clang, and
 # mixing clang linking with g++-compiled -flto objects breaks the jiffy build.
 export CC=gcc CXX=g++ AR=gcc-ar RANLIB=gcc-ranlib
+export KZ_OTP_BOOTSTRAP=1
 
 # `make core JOBS=$(nproc)` occasionally loses a race (erlc exits with
 # bad_directory); install.sh is idempotent, so one rerun finishes the tree.
