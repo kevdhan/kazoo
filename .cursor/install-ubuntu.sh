@@ -96,4 +96,9 @@ if [ "$(git -C "$EMK_DIR" rev-parse HEAD 2>/dev/null || true)" != "$ERLANG_MK_CO
     $SUDO make -C "$EMK_DIR" >/dev/null
 fi
 
-exec bash .cursor/install.sh
+# `make core JOBS=$(nproc)` occasionally loses a race (erlc exits with
+# bad_directory); install.sh is idempotent, so one rerun finishes the tree.
+bash .cursor/install.sh || {
+    echo "install-ubuntu.sh: install.sh failed, retrying once" >&2
+    bash .cursor/install.sh
+}
