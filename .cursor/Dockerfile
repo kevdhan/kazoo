@@ -1,7 +1,9 @@
 # Cursor cloud agent base image for KAZOO (OTP 22, matches make/erlang_version).
 # erlang:22 is Debian buster; its apt repositories are archived, so do not
 # apt-get update. git, make, gcc, python3 and wget are already present.
-FROM erlang:22
+# Pulled from the AWS mirror of the Docker official image; Docker Hub's
+# anonymous token endpoint is unreliable from build workers.
+FROM public.ecr.aws/docker/library/erlang:22
 
 # Latest erlang.mk requires OTP 23+ and has dropped the package index, so the
 # bootstrap in `make deps` fails on OTP 22. install.sh copies this pinned build.
