@@ -53,6 +53,14 @@ When `cycle` is `date`, the rule only considers `start_date` and matches it agai
 
 The `days` array is only valid when `cycle` is `yearly` or `monthly`.
 
+#### `time_window_start` and `time_window_stop`
+
+Both values are seconds from midnight in the timezone used by the temporal route, and both ends of the window are inclusive. When omitted, the window covers the whole day (`0` to `86400`).
+
+If `time_window_start` is later than `time_window_stop`, the window spans midnight: it opens at `time_window_start` on each day the rule matches and closes at `time_window_stop` on the following day. For example, an after-hours rule for Monday through Friday from 18:00 to 08:00 uses `"time_window_start": 64800` and `"time_window_stop": 28800`; a call at 02:00 on Saturday matches because the window opened on Friday.
+
+A window where `time_window_start` equals `time_window_stop` is rejected.
+
 ## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/temporal_rules
