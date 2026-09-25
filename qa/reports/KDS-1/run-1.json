@@ -1,0 +1,81 @@
+{
+  "ticket": "KDS-1",
+  "ticket_url": "https://fe-anysphere-demo.atlassian.net/browse/KDS-1",
+  "summary": "Temporal rules: support overnight time windows that cross midnight (e.g. 18:00-08:00)",
+  "run": 1,
+  "branch": "feature/temporal-rules-overnight-windows-qa-demo",
+  "commit": "81696dbb9f",
+  "triggered_by": "Kevin Han",
+  "triggered_at": "2026-09-25T16:36:01Z",
+  "verdict": "FAIL",
+  "duration_minutes": 50,
+  "environment": {
+    "otp": "22",
+    "deps_present_at_start": true,
+    "install_script_ran": false,
+    "setup_minutes": 1
+  },
+  "counts": {
+    "partitions": 5,
+    "partitions_pass": 1,
+    "partitions_issues": 4,
+    "partitions_blocked": 0,
+    "tests_reused": 1005,
+    "tests_added": 524,
+    "passed": 1362,
+    "failed": 167,
+    "blocked": 0,
+    "distinct_failures": 14,
+    "failures_confirmed_cross_model": 14
+  },
+  "partitions": [
+    {"id": "P1", "name": "Existing suites + build hygiene", "acs": ["DoD", "AC5"], "tests_reused": 1005, "tests_added": 0, "result": "PASS",
+     "evidence": "callflow All 859 tests passed; crossbar All 146 tests passed; proper (branch tests) All 859 passed; master cf_temporal_route_tests 779 pass on branch; -Werror clean (make/kz.mk:50,172,221); code_checks.bash exit 0"},
+    {"id": "P2", "name": "Overnight semantics per cycle", "acs": ["AC1", "AC2", "AC3"], "tests_reused": 0, "tests_added": 254, "result": "ISSUES",
+     "evidence": "cf_temporal_route_overnight_qa_tests: Failed 51, Passed 203", "failures": ["F1", "F2", "F5", "F6", "F7", "F14"]},
+    {"id": "P3", "name": "Robustness + same-day parity", "acs": ["AC4", "AC5"], "tests_reused": 0, "tests_added": 233, "result": "ISSUES",
+     "evidence": "1,538,784-input sweep: 8,640 crashes on branch, 0 on master; 1,331,640 parity checks: 0 mismatches; 1,183,680 enabled checks: 0 failures; cf_temporal_route_robustness_qa_tests: Failed 102, Passed 131", "failures": ["F1", "F2", "F3", "F6"]},
+    {"id": "P4", "name": "API validation", "acs": ["AC6", "AC7"], "tests_reused": 5, "tests_added": 37, "result": "ISSUES",
+     "evidence": "cb_temporal_rules_api_qa_tests: Failed 14, Passed 23", "failures": ["F9", "F10", "F11", "F12", "F13"]},
+    {"id": "P5", "name": "Blast radius + docs", "acs": ["AC4", "AC5", "AC7", "AC8"], "tests_reused": 0, "tests_added": 0, "result": "ISSUES",
+     "evidence": "route-level misrouting; 200k random same-day cases 0 differences vs master; doc example false for 59/60 Saturdays", "failures": ["F4", "F8", "F11", "F14"]}
+  ],
+  "acceptance_criteria": [
+    {"ac": "AC1", "result": "FAIL", "partitions": ["P2", "P3"], "failures": ["F1", "F2", "F5"]},
+    {"ac": "AC2", "result": "FAIL", "partitions": ["P2"], "failures": ["F2", "F5", "F6", "F7", "F14"]},
+    {"ac": "AC3", "result": "FAIL", "partitions": ["P2", "P3"], "failures": ["F1", "F6", "F7"]},
+    {"ac": "AC4", "result": "FAIL", "partitions": ["P3", "P5"], "failures": ["F1", "F2", "F3", "F4", "F8"]},
+    {"ac": "AC5", "result": "PASS", "partitions": ["P1", "P3", "P5"], "failures": []},
+    {"ac": "AC6", "result": "FAIL", "partitions": ["P4"], "failures": ["F9", "F10", "F13"]},
+    {"ac": "AC7", "result": "FAIL", "partitions": ["P4", "P5"], "failures": ["F11", "F12"]},
+    {"ac": "AC8", "result": "PASS", "partitions": ["P5"], "failures": [], "note": "Doc section present and matches spec; its example fails on current code (F14, a code defect)"}
+  ],
+  "failures": [
+    {"id": "F1", "acs": ["AC1", "AC3", "AC4"], "location": "applications/callflow/src/module/cf_temporal_route.erl:177-178", "test": "cf_temporal_route_overnight_qa_tests: daily 22:00-06:00: Thu 2020-10-01 02:00:00 matches", "expected": "true", "observed": "error:function_clause calendar:date_to_gregorian_days(2020,9,-1)", "cause": "kz_date:normalize({Y,M,D-2}) leaves negative days", "severity": "Critical", "confirmed": true},
+    {"id": "F2", "acs": ["AC1", "AC2", "AC4"], "location": "applications/callflow/src/module/cf_temporal_route.erl:178 -> :553", "test": "cf_temporal_route_overnight_qa_tests: weekly Mon-Fri 18:00-08:00: Tue 2020-09-01 03:00:00 matches", "expected": "true", "observed": "error:function_clause", "cause": "same D-2 date as F1 (weekly)", "severity": "Critical", "confirmed": true},
+    {"id": "F3", "acs": ["AC4"], "location": "applications/callflow/src/module/cf_temporal_route.erl:178 -> :627/:754 -> core/kazoo_stdlib/src/kz_date.erl:127", "test": "cf_temporal_route_robustness_qa_tests: monthly every wednesday overnight window on Sep 1 at 03:00:00 returns a boolean", "expected": "boolean", "observed": "error:function_clause", "cause": "same D-2 date as F1 (every-ordinal)", "severity": "High", "confirmed": true},
+    {"id": "F4", "acs": ["AC4"], "location": "applications/callflow/src/module/cf_temporal_route.erl:126; applications/callflow/src/cf_exe.erl:560-566", "test": "harness only (process_rules/3 not exported under TEST)", "expected": "<<\"catch_all\">> (master)", "observed": "crash; cf_exe continues to the _ default child", "cause": "F1-F3 crash aborts rule loop", "severity": "Critical", "confirmed": true},
+    {"id": "F5", "acs": ["AC1", "AC2"], "location": "applications/callflow/src/module/cf_temporal_route.erl:177-182; :580-582; :928-932", "test": "cf_temporal_route_overnight_qa_tests: weekly Mon-Fri 18:00-08:00: Sat 2020-09-19 03:00:00 matches (also Wed/Thu/Fri 03:00)", "expected": "true", "observed": "false", "cause": "weekly next_rule_date(D-2) returns D-2 when it is a rule day", "severity": "High", "confirmed": true},
+    {"id": "F6", "acs": ["AC2", "AC3"], "location": "applications/callflow/src/module/cf_temporal_route.erl:177-182", "test": "cf_temporal_route_overnight_qa_tests: monthly days=[31] Tue 2020-09-01 03:00:00 matches; monthly last friday Sat 2020-08-01 03:00:00 matches", "expected": "true", "observed": "false", "cause": "bad D-2 search start", "severity": "Medium", "confirmed": true},
+    {"id": "F7", "acs": ["AC2", "AC3"], "location": "applications/callflow/src/module/cf_temporal_route.erl:177-182", "test": "cf_temporal_route_overnight_qa_tests: yearly Dec 31 Fri 2021-01-01 03:00:00 matches", "expected": "true", "observed": "false", "cause": "bad D-2 search start across year", "severity": "Medium", "confirmed": true},
+    {"id": "F8", "acs": ["AC4"], "location": "applications/callflow/src/module/cf_temporal_route.erl:178 -> :754", "test": "harness only: yearly every <weekday> month 6, 2016-06-02 03:00", "expected": "boolean (master: default)", "observed": "error:if_clause calendar:day_of_the_week({2016,6,31})", "cause": "D-2 lookback day combined with rule month", "severity": "Medium", "confirmed": true},
+    {"id": "F9", "acs": ["AC6"], "location": "applications/crossbar/src/modules/cb_temporal_rules.erl:183-184", "test": "cb_temporal_rules_api_qa_tests: post_rejects_equal_window", "expected": "error 400 time_window_stop.invalid", "observed": "success", "cause": "validate_time_window only on PUT", "severity": "Medium", "confirmed": true},
+    {"id": "F10", "acs": ["AC6"], "location": "applications/crossbar/src/modules/cb_temporal_rules.erl:164 -> :152-155 -> :183-184", "test": "cb_temporal_rules_api_qa_tests: patch_rejects_equal_window", "expected": "error 400 time_window_stop.invalid", "observed": "success", "cause": "PATCH reaches the same Id clause as POST", "severity": "Medium", "confirmed": true},
+    {"id": "F11", "acs": ["AC7"], "location": "applications/crossbar/src/modules/cb_temporal_rules.erl:194-195", "test": "cb_temporal_rules_api_qa_tests: put_accepts_legacy_payloads (omit both fields)", "expected": "success", "observed": "error 400 cause 0", "cause": "stop defaults to 0 instead of 86400", "severity": "High", "confirmed": true},
+    {"id": "F12", "acs": ["AC7"], "location": "applications/crossbar/src/modules/cb_temporal_rules.erl:194-195", "test": "cb_temporal_rules_api_qa_tests: put_accepts_legacy_payloads (only start=0)", "expected": "success", "observed": "error 400 cause 0", "cause": "stop defaults to 0 instead of 86400", "severity": "High", "confirmed": true},
+    {"id": "F13", "acs": ["AC6"], "location": "applications/crossbar/src/modules/cb_temporal_rules.erl:194-195", "test": "cb_temporal_rules_api_qa_tests: put_applies_default_window (only start=86400)", "expected": "error 400", "observed": "success", "cause": "stop defaults to 0 instead of 86400", "severity": "Low", "confirmed": true},
+    {"id": "F14", "acs": ["AC2"], "location": "applications/crossbar/doc/temporal_rules.md:60 vs applications/callflow/src/module/cf_temporal_route.erl:177-182", "test": "cf_temporal_route_overnight_qa_tests: Sat 2020-09-05 03:00:00 matches", "expected": "true (documented)", "observed": "false for 59/60 Saturdays; others crash", "cause": "F5 (and F1 on the 1st)", "severity": "Medium", "confirmed": true}
+  ],
+  "tests_added_files": [
+    "applications/callflow/test/cf_temporal_route_overnight_qa_tests.erl",
+    "applications/callflow/test/cf_temporal_route_robustness_qa_tests.erl",
+    "applications/crossbar/test/cb_temporal_rules_api_qa_tests.erl"
+  ],
+  "gaps": [
+    "F4 and F8 have no committed tests: process_rules/3 not exported under TEST",
+    "HTTP envelope via api_resource/cowboy and crossbar_doc:save not exercised offline",
+    "DST/timezone and Monster UI out of scope",
+    "PUT with only time_window_stop=0 rejected: treated as correct per ticket defaults, needs confirmation"
+  ],
+  "next_action": "Transition to In Progress; fix agent must make the three QA modules pass and address F1-F14"
+}
