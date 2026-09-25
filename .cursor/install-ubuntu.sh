@@ -34,8 +34,15 @@ case "$(dpkg --print-architecture)" in
 esac
 arch="$(dpkg --print-architecture)"
 
+# The default image's cc/c++ are clang, but the rebar port compiler builds C++
+# NIFs (jiffy) with g++ and -flto; linking those GCC LTO objects through clang
+# fails ("plugin needed to handle lto object" / "cannot find -lstdc++"). Install
+# g++ and the libstdc++ headers matching the default gcc so the pinned
+# CC=gcc/CXX=g++ toolchain (exported before install.sh) links cleanly.
 # rabbit_common's codegen invokes `python`; 24.04 only ships python3.
-pkgs=(build-essential ca-certificates curl wget git python3 python-is-python3 libncurses6 libtinfo6 zlib1g-dev perl)
+gcc_major="$(gcc -dumpversion 2>/dev/null | cut -d. -f1 || true)"
+pkgs=(build-essential g++ ca-certificates curl wget git python3 python-is-python3 libncurses6 libtinfo6 zlib1g-dev perl)
+[ -n "$gcc_major" ] && pkgs+=("libstdc++-${gcc_major}-dev")
 missing=()
 for p in "${pkgs[@]}"; do
     dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing+=("$p")
@@ -95,6 +102,10 @@ if [ "$(git -C "$EMK_DIR" rev-parse HEAD 2>/dev/null || true)" != "$ERLANG_MK_CO
     $SUDO git -C "$EMK_DIR" checkout --quiet "$ERLANG_MK_COMMIT"
     $SUDO make -C "$EMK_DIR" >/dev/null
 fi
+
+# Force GCC for every C/C++ dep. The image's default `cc`/`c++` are clang, and
+# mixing clang linking with g++-compiled -flto objects breaks the jiffy build.
+export CC=gcc CXX=g++ AR=gcc-ar RANLIB=gcc-ranlib
 
 # `make core JOBS=$(nproc)` occasionally loses a race (erlc exits with
 # bad_directory); install.sh is idempotent, so one rerun finishes the tree.
