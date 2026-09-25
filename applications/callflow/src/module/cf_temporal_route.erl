@@ -34,6 +34,7 @@
 -ifdef(TEST).
 -export([next_rule_date/2
         ,sort_wdays/1
+        ,is_rule_active/3
         ]).
 -endif.
 
@@ -112,20 +113,100 @@ process_rules(Temporal
     lager:error("time based rule ~p (~s) is invalid, skipping", [Id, Name]),
     process_rules(Temporal, Rules, Call);
 process_rules(#temporal{local_sec=LSec
-                       ,local_date={Y, M, D}
+                       ,local_date=LocalDate
                        }=T
-             ,[#rule{cycle=Cycle
-                    ,id=Id
+             ,[#rule{id=Id
                     ,name=Name
-                    ,wtime_start=TStart
-                    ,wtime_stop=TStop
                     }=Rule
                | Rules
               ]
              ,Call
              ) ->
     lager:info("processing temporal rule ~s (~s)", [Id, Name]),
+    case is_rule_active(Rule, LocalDate, LSec) of
+        'true' -> Id;
+        'false' -> process_rules(T, Rules, Call)
+    end;
+process_rules(_Temporal, [], _Call) ->
+    lager:info("continuing with default callflow"),
+    'default'.
 
+%%------------------------------------------------------------------------------
+%% @doc Determines if the rule's time window contains the local time.
+%%
+%% A window whose start is later than its stop is an overnight window: it
+%% opens on a day the rule occurs and closes on the following day.
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_rule_active(rule(), kz_time:date(), non_neg_integer()) -> boolean().
+is_rule_active(#rule{wtime_start=TStart
+                    ,wtime_stop=TStop
+                    }=Rule
+              ,LocalDate
+              ,LSec
+              ) when TStart > TStop ->
+    is_overnight_window_active(Rule, LocalDate, LSec);
+is_rule_active(#rule{wtime_start=TStart
+                    ,wtime_stop=TStop
+                    }=Rule
+              ,LocalDate
+              ,LSec
+              ) ->
+    BaseTime = base_time(Rule, LocalDate),
+    case {BaseTime + TStart, BaseTime + TStop} of
+        {Start, _} when LSec < Start ->
+            lager:info("rule applies in the future ~w", [calendar:gregorian_seconds_to_datetime(Start)]),
+            'false';
+        {_, End} when LSec > End ->
+            lager:info("rule was valid today but expired ~w", [calendar:gregorian_seconds_to_datetime(End)]),
+            'false';
+        {_, End} ->
+            lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
+            'true'
+    end.
+
+-spec is_overnight_window_active(rule(), kz_time:date(), non_neg_integer()) -> boolean().
+is_overnight_window_active(#rule{wtime_start=TStart
+                                ,wtime_stop=TStop
+                                }=Rule
+                          ,{Y, M, D}=LocalDate
+                          ,LSec
+                          ) ->
+    Midnight = calendar:datetime_to_gregorian_seconds({LocalDate, {0,0,0}}),
+    Yesterday = kz_date:normalize({Y, M, D - 1}),
+    PreviousDate = kz_date:normalize(
+                     next_rule_date(Rule, kz_date:normalize({Y, M, D - 2}))
+                    ),
+    BaseTime = base_time(Rule, LocalDate),
+
+    case PreviousDate =:= Yesterday
+        andalso LSec =< Midnight + TStop
+    of
+        'true' ->
+            lager:info("within overnight time window that opened ~w until ~w"
+                      ,[Yesterday, calendar:gregorian_seconds_to_datetime(Midnight + TStop)]
+                      ),
+            'true';
+        'false' when LSec >= BaseTime + TStart
+                     andalso LSec =< BaseTime + ?SECONDS_IN_DAY + TStop ->
+            lager:info("within overnight time window until ~w"
+                      ,[calendar:gregorian_seconds_to_datetime(BaseTime + ?SECONDS_IN_DAY + TStop)]
+                      ),
+            'true';
+        'false' ->
+            lager:info("outside overnight time window starting ~w"
+                      ,[calendar:gregorian_seconds_to_datetime(BaseTime + TStart)]
+                      ),
+            'false'
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Gregorian seconds at midnight of the next date the rule occurs,
+%% searching from the local date.
+%% @end
+%%------------------------------------------------------------------------------
+-spec base_time(rule(), kz_time:date()) -> non_neg_integer().
+base_time(#rule{cycle=Cycle}=Rule, {Y, M, D}) ->
     %% Weekly logic becomes convoluted when prev date is passed for SearchDate.
     %% This creates lots of edge cases so pass today in weekly only.
     SearchDate = case Cycle of
@@ -137,22 +218,7 @@ process_rules(#temporal{local_sec=LSec
     BaseDate = kz_date:normalize(
                  next_rule_date(Rule, SearchDate)
                 ),
-    BaseTime = calendar:datetime_to_gregorian_seconds({BaseDate, {0,0,0}}),
-
-    case {BaseTime + TStart, BaseTime + TStop} of
-        {Start, _} when LSec < Start ->
-            lager:info("rule applies in the future ~w", [calendar:gregorian_seconds_to_datetime(Start)]),
-            process_rules(T, Rules, Call);
-        {_, End} when LSec > End ->
-            lager:info("rule was valid today but expired ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rules, Call);
-        {_, End} ->
-            lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            Id
-    end;
-process_rules(_Temporal, [], _Call) ->
-    lager:info("continuing with default callflow"),
-    'default'.
+    calendar:datetime_to_gregorian_seconds({BaseDate, {0,0,0}}).
 
 %%------------------------------------------------------------------------------
 %% @doc Finds and returns a list of rule records that have do not occur in

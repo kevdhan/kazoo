@@ -997,3 +997,57 @@ yearly_every_ordinal_recurrence_test_() ->
     ,?_assertEqual({2017,?APR,29}, cf_temporal_route:next_rule_date(#rule{cycle = <<"yearly">>, interval=2, ordinal = <<"fifth">>, wdays=[<<"saturday">>], month=?APR, start_date={2011,?JAN,1}}, {2011,?MAY,1}))
     ,?_assertEqual({2017,?APR,30}, cf_temporal_route:next_rule_date(#rule{cycle = <<"yearly">>, interval=2, ordinal = <<"fifth">>, wdays=[<<"sunday">>], month=?APR, start_date={2011,?JAN,1}}, {2011,?MAY,1}))
     ].
+
+-define(BUSINESS_HOURS
+       ,#rule{cycle = <<"weekly">>
+             ,wdays=[<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>]
+             ,start_date={2020,?JAN,6}
+             ,wtime_start=32400
+             ,wtime_stop=61200
+             }
+       ).
+
+-define(AFTER_HOURS
+       ,?BUSINESS_HOURS#rule{wtime_start=64800
+                            ,wtime_stop=28800
+                            }
+       ).
+
+-define(NIGHTLY
+       ,#rule{cycle = <<"daily">>
+             ,start_date={2020,?JAN,1}
+             ,wtime_start=79200
+             ,wtime_stop=21600
+             }
+       ).
+
+same_day_window_test_() ->
+    [?_assert(is_active(?BUSINESS_HOURS, {{2020,?SEP,16}, {10,0,0}}))
+    ,?_assert(is_active(?BUSINESS_HOURS, {{2020,?SEP,16}, {9,0,0}}))
+    ,?_assert(is_active(?BUSINESS_HOURS, {{2020,?SEP,16}, {17,0,0}}))
+    ,?_assertNot(is_active(?BUSINESS_HOURS, {{2020,?SEP,16}, {8,59,59}}))
+    ,?_assertNot(is_active(?BUSINESS_HOURS, {{2020,?SEP,16}, {18,0,0}}))
+    ,?_assertNot(is_active(?BUSINESS_HOURS, {{2020,?SEP,19}, {10,0,0}}))
+    ].
+
+daily_overnight_window_test_() ->
+    [?_assert(is_active(?NIGHTLY, {{2020,?SEP,16}, {23,0,0}}))
+    ,?_assert(is_active(?NIGHTLY, {{2020,?SEP,16}, {22,0,0}}))
+    ,?_assert(is_active(?NIGHTLY, {{2020,?SEP,16}, {3,0,0}}))
+    ,?_assert(is_active(?NIGHTLY, {{2020,?SEP,16}, {6,0,0}}))
+    ,?_assertNot(is_active(?NIGHTLY, {{2020,?SEP,16}, {6,0,1}}))
+    ,?_assertNot(is_active(?NIGHTLY, {{2020,?SEP,16}, {12,0,0}}))
+    ,?_assertNot(is_active(?NIGHTLY, {{2020,?SEP,16}, {21,59,59}}))
+    ].
+
+weekly_overnight_window_test_() ->
+    [?_assert(is_active(?AFTER_HOURS, {{2020,?SEP,14}, {19,0,0}}))
+    ,?_assert(is_active(?AFTER_HOURS, {{2020,?SEP,18}, {22,0,0}}))
+    ,?_assert(is_active(?AFTER_HOURS, {{2020,?SEP,15}, {3,0,0}}))
+    ,?_assertNot(is_active(?AFTER_HOURS, {{2020,?SEP,14}, {3,0,0}}))
+    ,?_assertNot(is_active(?AFTER_HOURS, {{2020,?SEP,20}, {3,0,0}}))
+    ,?_assertNot(is_active(?AFTER_HOURS, {{2020,?SEP,16}, {12,0,0}}))
+    ].
+
+is_active(Rule, {Date, _Time}=DateTime) ->
+    cf_temporal_route:is_rule_active(Rule, Date, calendar:datetime_to_gregorian_seconds(DateTime)).
