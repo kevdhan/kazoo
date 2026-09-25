@@ -34,7 +34,8 @@ case "$(dpkg --print-architecture)" in
 esac
 arch="$(dpkg --print-architecture)"
 
-pkgs=(build-essential ca-certificates curl wget git python3 libncurses6 libtinfo6 zlib1g-dev perl)
+# rabbit_common's codegen invokes `python`; 24.04 only ships python3.
+pkgs=(build-essential ca-certificates curl wget git python3 python-is-python3 libncurses6 libtinfo6 zlib1g-dev perl)
 missing=()
 for p in "${pkgs[@]}"; do
     dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing+=("$p")
@@ -46,7 +47,7 @@ fi
 
 if ! ldconfig -p | grep -q 'libcrypto\.so\.1\.1 '; then
     tmp="$(mktemp -d)"
-    deb="$(curl -fsSL "$ssl_pool" | grep -oE "libssl1\.1_1\.1\.1f-1ubuntu2[.0-9]*_${arch}\.deb" | sort -uV | tail -1 || true)"
+    deb="$(curl -fsSL "$ssl_pool" | grep -oE "libssl1\.1_1\.1\.1f-1ubuntu2[.0-9]*_${arch}\.deb" | sort -u -t_ -k2,2V | tail -1 || true)"
     if [ -n "$deb" ] && curl -fsSL -o "$tmp/$deb" "$ssl_pool$deb"; then
         $SUDO dpkg -i "$tmp/$deb"
     else
